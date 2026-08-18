@@ -88,7 +88,7 @@ jobs:
           if [[ -s ../compiler/custom-feeds.conf ]]; then
               {
                   printf '\n# Third-party feeds from compiler/custom-feeds.conf\n'
-                  cat ../compiler/custom-feeds.conf
+                  awk 'NF && $1 !~ /^#/ { print }' ../compiler/custom-feeds.conf
               } >> feeds.conf
           fi
 
