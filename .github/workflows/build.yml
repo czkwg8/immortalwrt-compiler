@@ -1,0 +1,361 @@
+name: Build Ruijie RG-X60 U-BootMod
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_repository:
+        description: ImmortalWrt source repository in owner/repo form
+        required: true
+        default: immortalwrt/immortalwrt
+        type: string
+      source_ref:
+        description: Branch, tag, or commit to build
+        required: true
+        default: master
+        type: string
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - .github/workflows/build.yml
+      - custom-feeds.conf
+      - patches/**
+      - scripts/**
+      - xg-x60-config
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rg-x60-ubootmod-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  KEEP_BUILD_RELEASES: "3"
+  OPENWRT_PREBUILT_BASE_URL: https://downloads.openwrt.org/snapshots/targets/mediatek/filogic
+  OPENWRT_PREBUILT_ROOT: /opt/openwrt-prebuilt
+  RELEASE_TAG_PREFIX: rg-x60-ubootmod-build-
+  SOURCE_REPOSITORY: ${{ inputs.source_repository || 'immortalwrt/immortalwrt' }}
+  SOURCE_REF: ${{ inputs.source_ref || 'master' }}
+
+jobs:
+  build:
+    name: ImmortalWrt mediatek/filogic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout compiler files
+        uses: actions/checkout@v4
+        with:
+          path: compiler
+
+      - name: Checkout ImmortalWrt source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SOURCE_REPOSITORY }}
+          ref: ${{ env.SOURCE_REF }}
+          path: source
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Install build dependencies
+        run: |
+          set -Eeuo pipefail
+          bash ./compiler/scripts/install-dependencies.sh
+
+      - name: Download and extract OpenWrt prebuilt LLVM-BPF and toolchain
+        run: |
+          set -Eeuo pipefail
+          bash ./compiler/scripts/prepare-openwrt-prebuilt.sh ./source
+
+      - name: Apply long-lived RG-X60 patch
+        run: |
+          set -Eeuo pipefail
+          bash ./compiler/scripts/apply-patch.sh ./source
+
+      - name: Update feeds and load build configuration
+        run: |
+          set -Eeuo pipefail
+          jobs="$(nproc)"
+
+          pushd ./source >/dev/null
+          install -m 0644 feeds.conf.default feeds.conf
+          if [[ -s ../compiler/custom-feeds.conf ]]; then
+              {
+                  printf '\n# Third-party feeds from compiler/custom-feeds.conf\n'
+                  cat ../compiler/custom-feeds.conf
+              } >> feeds.conf
+          fi
+
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          install -m 0644 ../compiler/xg-x60-config .config
+
+          set_config_string() {
+              local symbol="$1"
+              local value="$2"
+              local config_line="CONFIG_${symbol}=\"${value}\""
+              if grep -q "^CONFIG_${symbol}=" .config; then
+                  sed -i "s|^CONFIG_${symbol}=.*|$config_line|" .config
+              else
+                  printf '%s\n' "$config_line" >> .config
+              fi
+          }
+
+          set_config_string TOOLCHAIN_ROOT "$OPENWRT_TOOLCHAIN_ROOT"
+          set_config_string TOOLCHAIN_PREFIX "$OPENWRT_TOOLCHAIN_PREFIX"
+          set_config_string TARGET_NAME "$OPENWRT_TOOLCHAIN_TARGET"
+          set_config_string EXTERNAL_GCC_VERSION "$OPENWRT_TOOLCHAIN_GCC_VERSION"
+          make defconfig
+          make download -j"$jobs"
+
+          required_configs=(
+              'CONFIG_TARGET_mediatek_filogic_DEVICE_ruijie_rg-x60-ubootmod=y'
+              'CONFIG_EXTERNAL_TOOLCHAIN=y'
+              'CONFIG_BPF_TOOLCHAIN_PREBUILT=y'
+              'CONFIG_USE_LLVM_PREBUILT=y'
+          )
+          for required_config in "${required_configs[@]}"; do
+              if ! grep -Fqx "$required_config" .config; then
+                  echo "Required configuration was not retained by make defconfig: $required_config" >&2
+                  echo 'Enable external toolchain and BPF_TOOLCHAIN_PREBUILT in xg-x60-config.' >&2
+                  exit 1
+              fi
+          done
+          popd >/dev/null
+
+      - name: Build firmware
+        run: |
+          set -Eeuo pipefail
+          jobs="$(nproc)"
+
+          pushd ./source >/dev/null
+          if ! make -j"$jobs"; then
+              echo 'Parallel build failed; rerunning serially with verbose output.' >&2
+              make -j1 V=s
+          fi
+          popd >/dev/null
+
+      - name: Collect firmware and build metadata
+        run: |
+          set -Eeuo pipefail
+
+          target_directory="$GITHUB_WORKSPACE/source/bin/targets/mediatek/filogic"
+          artifact_root="$GITHUB_WORKSPACE/artifacts"
+          input_root="$artifact_root/build-inputs"
+          mkdir -p -- "$input_root"
+
+          shopt -s nullglob
+          device_files=("$target_directory"/*ruijie_rg-x60-ubootmod*)
+          if (( ${#device_files[@]} == 0 )); then
+              echo 'No RG-X60 U-BootMod firmware files were produced.' >&2
+              exit 1
+          fi
+
+          required_suffixes=(
+              initramfs-recovery.itb
+              squashfs-sysupgrade.itb
+              preloader.bin
+              bl31-uboot.fip
+          )
+
+          for suffix in "${required_suffixes[@]}"; do
+              found=false
+              for file in "${device_files[@]}"; do
+                  if [[ "${file##*/}" == *"$suffix" ]]; then
+                      found=true
+                      break
+                  fi
+              done
+              if [[ "$found" != true ]]; then
+                  echo "Required firmware output is missing: *$suffix" >&2
+                  exit 1
+              fi
+          done
+
+          cp -- "${device_files[@]}" "$artifact_root/"
+
+          for metadata_name in config.buildinfo feeds.buildinfo profiles.json sha256sums version.buildinfo; do
+              if [[ -f "$target_directory/$metadata_name" ]]; then
+                  cp -- "$target_directory/$metadata_name" "$artifact_root/"
+              fi
+          done
+
+          cp -- ./compiler/patches/0001-mediatek-add-ruijie-rg-x60-ubootmod.patch "$input_root/"
+          cp -- ./compiler/custom-feeds.conf "$input_root/"
+          cp -- ./compiler/xg-x60-config "$input_root/"
+          cp -- "$OPENWRT_PREBUILT_PROFILES" "$input_root/openwrt-prebuilt-profiles.json"
+          cp -- "$OPENWRT_PREBUILT_CHECKSUMS" "$input_root/openwrt-prebuilt-sha256sums"
+
+          source_commit="$(git -C ./source rev-parse HEAD)"
+          patch_hash="$(sha256sum ./compiler/patches/0001-mediatek-add-ruijie-rg-x60-ubootmod.patch | awk '{print $1}')"
+          printf '%s\n' \
+              "source_repository=$SOURCE_REPOSITORY" \
+              "source_ref=$SOURCE_REF" \
+              "source_commit=$source_commit" \
+              "patch_sha256=$patch_hash" \
+              "llvm_bpf_archive=$OPENWRT_LLVM_BPF_ARCHIVE" \
+              "llvm_bpf_sha256=$OPENWRT_LLVM_BPF_SHA256" \
+              "llvm_bpf_root=$OPENWRT_LLVM_BPF_ROOT" \
+              "toolchain_archive=$OPENWRT_TOOLCHAIN_ARCHIVE" \
+              "toolchain_sha256=$OPENWRT_TOOLCHAIN_SHA256" \
+              "toolchain_root=$OPENWRT_TOOLCHAIN_ROOT" \
+              "toolchain_prefix=$OPENWRT_TOOLCHAIN_PREFIX" \
+              "toolchain_gcc_version=$OPENWRT_TOOLCHAIN_GCC_VERSION" \
+              "workflow_run=$GITHUB_RUN_ID" \
+              "workflow_attempt=$GITHUB_RUN_ATTEMPT" \
+              "built_at_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+              > "$artifact_root/BUILD-MANIFEST.txt"
+
+          (
+              cd -- "$artifact_root"
+              find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum
+          ) > "$artifact_root/SHA256SUMS"
+
+          {
+              echo '## Ruijie RG-X60 U-BootMod build'
+              echo
+              printf -- '- Source: `%s@%s`\n' "$SOURCE_REPOSITORY" "$source_commit"
+              printf -- '- Firmware files: %s\n' "${#device_files[@]}"
+              printf -- '- Patch SHA-256: `%s`\n' "$patch_hash"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruijie-rg-x60-ubootmod-${{ github.run_number }}-${{ github.run_attempt }}
+          path: artifacts
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  publish:
+    name: Publish release and prune build history
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: write
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Download firmware artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ruijie-rg-x60-ubootmod-${{ github.run_number }}-${{ github.run_attempt }}
+          path: artifacts
+
+      - name: Prune previous build releases and workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+
+          if (( KEEP_BUILD_RELEASES < 1 )); then
+              echo 'KEEP_BUILD_RELEASES must be at least 1.' >&2
+              exit 1
+          fi
+
+          keep_previous=$((KEEP_BUILD_RELEASES - 1))
+          current_release_tag="${RELEASE_TAG_PREFIX}${GITHUB_RUN_ID}"
+
+          if gh release view "$current_release_tag" \
+              --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Replacing release from an earlier attempt: $current_release_tag"
+              gh release delete "$current_release_tag" \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --cleanup-tag \
+                  --yes
+          fi
+
+          mapfile -t stale_release_tags < <(
+              gh api --paginate \
+                  -H 'X-GitHub-Api-Version: 2022-11-28' \
+                  "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+                  --jq ".[] | select((.tag_name | startswith(\"$RELEASE_TAG_PREFIX\")) and .tag_name != \"$current_release_tag\") | [.created_at, .tag_name] | @tsv" |
+                  sort -r |
+                  tail -n "+$((keep_previous + 1))" |
+                  cut -f2-
+          )
+
+          for release_tag in "${stale_release_tags[@]}"; do
+              [[ -n "$release_tag" ]] || continue
+              echo "Deleting old build release: $release_tag"
+              gh release delete "$release_tag" \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --cleanup-tag \
+                  --yes
+          done
+
+          workflow_path="${GITHUB_WORKFLOW_REF%@*}"
+          workflow_file="${workflow_path##*/}"
+
+          mapfile -t workflow_runs < <(
+              gh api --paginate \
+                  -H 'X-GitHub-Api-Version: 2022-11-28' \
+                  "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_file/runs?per_page=100" \
+                  --jq '.workflow_runs[] | [.created_at, (.id | tostring), .status, (.conclusion // "")] | @tsv' |
+                  sort -r
+          )
+
+          stale_run_ids=()
+          for workflow_run in "${workflow_runs[@]}"; do
+              IFS=$'\t' read -r _created_at run_id status _conclusion <<< "$workflow_run"
+
+              if [[ "$run_id" == "$GITHUB_RUN_ID" || "$status" != 'completed' ]]; then
+                  continue
+              fi
+
+              stale_run_ids+=("$run_id")
+          done
+
+          for run_id in "${stale_run_ids[@]}"; do
+              echo "Deleting old workflow run: $run_id"
+              gh api --method DELETE \
+                  -H 'X-GitHub-Api-Version: 2022-11-28' \
+                  "repos/$GITHUB_REPOSITORY/actions/runs/$run_id"
+          done
+
+          printf 'Deleted %s old build release(s) and %s old workflow run(s).\n' \
+              "${#stale_release_tags[@]}" \
+              "${#stale_run_ids[@]}"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+
+          artifact_root="$GITHUB_WORKSPACE/artifacts"
+          mapfile -d '' release_files < <(
+              find "$artifact_root" -maxdepth 1 -type f -print0 | sort -z
+          )
+
+          if (( ${#release_files[@]} == 0 )); then
+              echo 'No files are available for the GitHub release.' >&2
+              exit 1
+          fi
+
+          release_tag="${RELEASE_TAG_PREFIX}${GITHUB_RUN_ID}"
+          release_title="Ruijie RG-X60 U-BootMod build #${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          release_url="$(
+              gh release create "$release_tag" "${release_files[@]}" \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --target "$GITHUB_SHA" \
+                  --title "$release_title" \
+                  --notes-file "$artifact_root/BUILD-MANIFEST.txt" \
+                  --latest
+          )"
+
+          {
+              echo
+              printf -- '- Release: [%s](%s)\n' "$release_tag" "$release_url"
+              printf -- '- Release retention: latest %s successful builds\n' "$KEEP_BUILD_RELEASES"
+          } >> "$GITHUB_STEP_SUMMARY"

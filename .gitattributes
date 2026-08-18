@@ -1,0 +1,8 @@
+* text=auto
+*.config text eol=lf
+*.md text eol=lf
+*.patch text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+/custom-feeds.conf text eol=lf
+/xg-x60-config text eol=lf
