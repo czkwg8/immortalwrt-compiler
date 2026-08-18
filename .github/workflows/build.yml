@@ -130,6 +130,7 @@ jobs:
               fi
           }
 
+          toolchain_real="$(readlink -f "$OPENWRT_TOOLCHAIN_ROOT")"
           set_config_string TOOLCHAIN_ROOT "$OPENWRT_TOOLCHAIN_ROOT"
           set_config_string TOOLCHAIN_PREFIX "$OPENWRT_TOOLCHAIN_PREFIX"
           set_config_string TARGET_NAME "$OPENWRT_TOOLCHAIN_TARGET"
@@ -145,9 +146,10 @@ jobs:
           for lib in C RT PTHREAD GCC STDCPP SSP GFORTRAN GOMP ATOMIC QUADMATH ASAN TSAN LSAN UBSAN; do
               spec=""
               llib="$(echo "$lib" | tr '[:upper:]' '[:lower:]')"
+              set_config_string "LIB${lib}_ROOT_DIR" "$OPENWRT_TOOLCHAIN_ROOT"
               while IFS= read -r file; do
                   [[ -z "$file" ]] && continue
-                  rel_file="$(echo "$file" | sed -e "s#^$OPENWRT_TOOLCHAIN_ROOT#.#")"
+                  rel_file="$(echo "$file" | sed -e "s#^$toolchain_real#.#" -e "s#^$OPENWRT_TOOLCHAIN_ROOT#.#")"
                   spec="${spec:+$spec }$rel_file"
               done < <(./scripts/ext-toolchain.sh --toolchain "$OPENWRT_TOOLCHAIN_ROOT" --print-libs "$lib" 2>/dev/null || true)
               if [[ -n "$spec" ]]; then
@@ -161,7 +163,7 @@ jobs:
               lbin="$(echo "$bin" | tr '[:upper:]' '[:lower:]')"
               while IFS= read -r file; do
                   [[ -z "$file" ]] && continue
-                  rel_file="$(echo "$file" | sed -e "s#^$OPENWRT_TOOLCHAIN_ROOT#.#")"
+                  rel_file="$(echo "$file" | sed -e "s#^$toolchain_real#.#" -e "s#^$OPENWRT_TOOLCHAIN_ROOT#.#")"
                   spec="${spec:+$spec }$rel_file"
               done < <(./scripts/ext-toolchain.sh --toolchain "$OPENWRT_TOOLCHAIN_ROOT" --print-bin "$bin" 2>/dev/null || true)
               if [[ -n "$spec" ]]; then
