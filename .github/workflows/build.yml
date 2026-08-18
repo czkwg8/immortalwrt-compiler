@@ -50,12 +50,12 @@ jobs:
 
     steps:
       - name: Checkout compiler files
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: compiler
 
       - name: Checkout ImmortalWrt source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.SOURCE_REPOSITORY }}
           ref: ${{ env.SOURCE_REF }}
@@ -275,8 +275,8 @@ jobs:
 
           (
               cd -- "$artifact_root"
-              find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum
-          ) > "$artifact_root/SHA256SUMS"
+              find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum
+          ) > "$artifact_root/SHA256SUMS.txt"
 
           {
               echo '## Ruijie RG-X60 U-BootMod build'
@@ -287,7 +287,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload firmware artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ruijie-rg-x60-ubootmod-${{ github.run_number }}-${{ github.run_attempt }}
           path: artifacts
@@ -308,7 +308,7 @@ jobs:
 
     steps:
       - name: Download firmware artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ruijie-rg-x60-ubootmod-${{ github.run_number }}-${{ github.run_attempt }}
           path: artifacts
