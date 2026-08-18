@@ -107,10 +107,69 @@ jobs:
               fi
           }
 
+          set_config_bool() {
+              local symbol="$1"
+              local value="$2"
+              local config_line
+              if [[ "$value" == "y" ]]; then
+                  config_line="CONFIG_${symbol}=y"
+                  if grep -q "^# CONFIG_${symbol} is not set" .config; then
+                      sed -i "s|^# CONFIG_${symbol} is not set|$config_line|" .config
+                  elif grep -q "^CONFIG_${symbol}=" .config; then
+                      sed -i "s|^CONFIG_${symbol}=.*|$config_line|" .config
+                  else
+                      printf '%s\n' "$config_line" >> .config
+                  fi
+              else
+                  config_line="# CONFIG_${symbol} is not set"
+                  if grep -q "^CONFIG_${symbol}=" .config; then
+                      sed -i "s|^CONFIG_${symbol}=.*|$config_line|" .config
+                  elif ! grep -q "^# CONFIG_${symbol} is not set" .config; then
+                      printf '%s\n' "$config_line" >> .config
+                  fi
+              fi
+          }
+
           set_config_string TOOLCHAIN_ROOT "$OPENWRT_TOOLCHAIN_ROOT"
           set_config_string TOOLCHAIN_PREFIX "$OPENWRT_TOOLCHAIN_PREFIX"
           set_config_string TARGET_NAME "$OPENWRT_TOOLCHAIN_TARGET"
           set_config_string EXTERNAL_GCC_VERSION "$OPENWRT_TOOLCHAIN_GCC_VERSION"
+
+          libc_type="$(./scripts/ext-toolchain.sh --toolchain "$OPENWRT_TOOLCHAIN_ROOT" --print-libc 2>/dev/null || true)"
+          if [[ "$libc_type" == "musl" ]]; then
+              set_config_bool EXTERNAL_TOOLCHAIN_LIBC_USE_MUSL y
+          elif [[ "$libc_type" == "glibc" ]]; then
+              set_config_bool EXTERNAL_TOOLCHAIN_LIBC_USE_GLIBC y
+          fi
+
+          for lib in C RT PTHREAD GCC STDCPP SSP GFORTRAN GOMP ATOMIC QUADMATH ASAN TSAN LSAN UBSAN; do
+              spec=""
+              llib="$(echo "$lib" | tr '[:upper:]' '[:lower:]')"
+              while IFS= read -r file; do
+                  [[ -z "$file" ]] && continue
+                  rel_file="$(echo "$file" | sed -e "s#^$OPENWRT_TOOLCHAIN_ROOT#.#")"
+                  spec="${spec:+$spec }$rel_file"
+              done < <(./scripts/ext-toolchain.sh --toolchain "$OPENWRT_TOOLCHAIN_ROOT" --print-libs "$lib" 2>/dev/null || true)
+              if [[ -n "$spec" ]]; then
+                  set_config_bool "PACKAGE_lib${llib}" y
+                  set_config_string "LIB${lib}_FILE_SPEC" "$spec"
+              fi
+          done
+
+          for bin in LDD LDCONFIG GDB GDBSERVER; do
+              spec=""
+              lbin="$(echo "$bin" | tr '[:upper:]' '[:lower:]')"
+              while IFS= read -r file; do
+                  [[ -z "$file" ]] && continue
+                  rel_file="$(echo "$file" | sed -e "s#^$OPENWRT_TOOLCHAIN_ROOT#.#")"
+                  spec="${spec:+$spec }$rel_file"
+              done < <(./scripts/ext-toolchain.sh --toolchain "$OPENWRT_TOOLCHAIN_ROOT" --print-bin "$bin" 2>/dev/null || true)
+              if [[ -n "$spec" ]]; then
+                  set_config_bool "PACKAGE_${lbin}" y
+                  set_config_string "${bin}_FILE_SPEC" "$spec"
+              fi
+          done
+
           make defconfig
           make download -j"$jobs"
 
