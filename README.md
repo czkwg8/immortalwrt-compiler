@@ -50,6 +50,8 @@ src-git myfeed https://github.com/owner/openwrt-feed.git;main
 - `*-bl31-uboot.fip`
 - 构建信息和 SHA-256 校验文件
 
+工作流还会按计划每周五 03:00（UTC）运行。计划运行会先查询 `SOURCE_REPOSITORY@SOURCE_REF` 的最新提交，并与最近一次成功构建 Release 的 `BUILD-MANIFEST.txt` 中记录的提交比较；如果提交没有变化，就只保留检查记录并跳过编译和发布。查询失败或找不到历史构建记录时会继续编译，以避免遗漏更新。手动运行和仓库推送触发不受此检查影响。
+
 由本工作流发布的 Release 仅保留最近 3 个成功构建版本。Release 清理只匹配 `rg-x60-ubootmod-build-` 标签前缀，不会删除手工发布或其他工作流生成的 Release。
 
 Workflow Runs 使用另一套策略：编译、产物检查或上传失败时不会执行发布任务，因此失败记录和完整日志会保留下来；下一次构建成功后，发布任务会删除当前 `build.yml` 此前所有已经结束的运行记录。当前成功运行无法删除自身，仍在执行或排队的并发任务也不会被删除。
