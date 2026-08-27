@@ -35,14 +35,14 @@ CONFIG_EXTERNAL_TOOLCHAIN_LIBC_USE_MUSL=y
 src-git myfeed https://github.com/owner/openwrt-feed.git;main
 ```
 
-第三方 feed 的名称不要与上游 feed 重复。为了让构建结果可复现，建议固定到标签或提交；如果跟随分支，分支更新后构建内容也会变化。修改 `custom-feeds.conf` 会自动触发一次构建，该文件也会随构建输入一起保存到 Artifact。
+第三方 feed 的名称不要与上游 feed 重复。为了让构建结果可复现，建议固定到标签或提交；如果跟随分支，分支更新后构建内容也会变化。该文件会随构建输入一起保存到 Artifact。
 
 手动运行时可以填写：
 
 - `source_repository`：默认 `immortalwrt/immortalwrt`。
 - `source_ref`：默认 `master`，也可以填写分支、标签或提交 SHA。
 
-工作流也会在补丁、配置或编译脚本推送到 `master`/`main` 时自动编译。成功构建的产物会同时上传为 GitHub Actions Artifact 并发布到 GitHub Release，包括：
+成功构建的产物会同时上传为 GitHub Actions Artifact 并发布到 GitHub Release，包括：
 
 - `*-initramfs-recovery.itb`
 - `*-squashfs-sysupgrade.itb`
@@ -50,7 +50,7 @@ src-git myfeed https://github.com/owner/openwrt-feed.git;main
 - `*-bl31-uboot.fip`
 - 构建信息和 SHA-256 校验文件
 
-工作流还会按计划每周五 03:00（UTC）运行。计划运行会先查询 `SOURCE_REPOSITORY@SOURCE_REF` 的最新提交，并与最近一次成功构建 Release 的 `BUILD-MANIFEST.txt` 中记录的提交比较；如果提交没有变化，就只保留检查记录并跳过编译和发布。查询失败或找不到历史构建记录时会继续编译，以避免遗漏更新。手动运行和仓库推送触发不受此检查影响。
+工作流还会按计划每周五 03:00（UTC）运行。计划运行会先查询 `SOURCE_REPOSITORY@SOURCE_REF` 的最新提交，并与最近一次成功构建 Release 的 `BUILD-MANIFEST.txt` 中记录的提交比较；如果提交没有变化，就只保留检查记录并跳过编译和发布。查询失败或找不到历史构建记录时会继续编译，以避免遗漏更新。手动运行不受此检查影响。
 
 由本工作流发布的 Release 仅保留最近 3 个成功构建版本。Release 清理只匹配 `rg-x60-ubootmod-build-` 标签前缀，不会删除手工发布或其他工作流生成的 Release。
 

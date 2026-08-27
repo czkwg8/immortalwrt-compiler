@@ -13,16 +13,6 @@ on:
         required: true
         default: master
         type: string
-  push:
-    branches:
-      - master
-      - main
-    paths:
-      - .github/workflows/build.yml
-      - custom-feeds.conf
-      - patches/**
-      - scripts/**
-      - xg-x60-config
   schedule:
     - cron: '0 3 * * 5'
 
@@ -398,6 +388,7 @@ jobs:
   publish:
     name: Publish release and prune build history
     needs: build
+    if: ${{ always() && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       actions: write
