@@ -15,7 +15,7 @@ if [[ "$prebuilt_root" != '/opt/openwrt-prebuilt' ]]; then
     exit 1
 fi
 
-for command in curl sha256sum tar grep awk find python3 sudo; do
+for command in curl sha256sum tar grep awk find sudo; do
     if ! command -v "$command" >/dev/null 2>&1; then
         echo "Required command is missing: $command" >&2
         exit 1
@@ -37,37 +37,30 @@ curl --fail --location --retry 5 --retry-all-errors --connect-timeout 20 \
     --output "$download_root/sha256sums" \
     "$base_url/sha256sums"
 
-mapfile -t artifact_names < <(
-    python3 - "$download_root/profiles.json" <<'PY'
-import json
-import sys
+# profiles.json no longer advertises the prebuilt archives, so discover them
+# from sha256sums, which lists every file published in the target directory.
+find_archive() {
+    local description="$1"
+    local pattern="$2"
+    local -a matches
 
-with open(sys.argv[1], encoding="utf-8") as stream:
-    profiles = json.load(stream)
+    mapfile -t matches < <(
+        awk -v pattern="$pattern" '
+            substr($2, 1, 1) == "*" && substr($2, 2) ~ pattern { print substr($2, 2) }
+        ' "$download_root/sha256sums"
+    )
+    if (( ${#matches[@]} != 1 )); then
+        echo "Expected one x86_64 $description archive in sha256sums, found ${#matches[@]}." >&2
+        printf '%s\n' "${matches[@]}" >&2
+        exit 1
+    fi
+    printf '%s\n' "${matches[0]}"
+}
 
-for artifact in ("llvm-bpf", "toolchain"):
-    filename = profiles.get(artifact, {}).get("x86_64")
-    if not isinstance(filename, str) or "/" in filename or not filename.endswith(".tar.zst"):
-        raise SystemExit(f"profiles.json has no x86_64 {artifact} archive")
-    print(filename)
-PY
-)
-if (( ${#artifact_names[@]} != 2 )); then
-    echo 'profiles.json did not provide both x86_64 prebuilt archives.' >&2
-    exit 1
-fi
-
-llvm_filename="${artifact_names[0]}"
-toolchain_filename="${artifact_names[1]}"
-
-case "$llvm_filename" in
-    llvm-bpf-*.Linux-x86_64.tar.zst) ;;
-    *) echo "Unexpected LLVM-BPF filename: $llvm_filename" >&2; exit 1 ;;
-esac
-case "$toolchain_filename" in
-    openwrt-toolchain-mediatek-filogic_*.Linux-x86_64.tar.zst) ;;
-    *) echo "Unexpected toolchain filename: $toolchain_filename" >&2; exit 1 ;;
-esac
+llvm_filename="$(find_archive LLVM-BPF '^llvm-bpf-[^/]+[.]Linux-x86_64[.]tar[.]zst$')"
+toolchain_filename="$(find_archive toolchain '^openwrt-toolchain-mediatek-filogic_[^/]+[.]Linux-x86_64[.]tar[.]zst$')"
+printf 'LLVM-BPF archive: %s\n' "$llvm_filename"
+printf 'Toolchain archive: %s\n' "$toolchain_filename"
 
 checksum_for() {
     local filename="$1"
