@@ -183,6 +183,7 @@ jobs:
           fi
 
           ./scripts/feeds update -a
+          bash ../compiler/scripts/patch-feeds.sh .
           ./scripts/feeds install -a
           install -m 0644 ../compiler/xg-x60-config .config
 
@@ -338,6 +339,9 @@ jobs:
           done
 
           cp -- ./compiler/patches/0001-mediatek-add-ruijie-rg-x60-ubootmod.patch "$input_root/"
+          if [[ -d ./compiler/patches/feeds ]]; then
+              cp -r -- ./compiler/patches/feeds "$input_root/"
+          fi
           cp -- ./compiler/custom-feeds.conf "$input_root/"
           cp -- ./compiler/xg-x60-config "$input_root/"
           cp -- "$OPENWRT_PREBUILT_PROFILES" "$input_root/openwrt-prebuilt-profiles.json"

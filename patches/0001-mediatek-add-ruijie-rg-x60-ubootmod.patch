@@ -1,8 +1,8 @@
 diff --git a/package/boot/uboot-mediatek/Makefile b/package/boot/uboot-mediatek/Makefile
-index c4a2d0c2b062ae06cdee5b172ba6ea55a1735bf3..a10dd99b67f2e000084ee197bbb1b9390fd07b25 100644
+index 5e8151e..ff59454 100644
 --- a/package/boot/uboot-mediatek/Makefile
 +++ b/package/boot/uboot-mediatek/Makefile
-@@ -1075,6 +1075,18 @@ define U-Boot/mt7986_tplink_tl-xtr8488
+@@ -1157,6 +1157,18 @@ define U-Boot/mt7986_tplink_tl-xtr8488
    DEPENDS:=+trusted-firmware-a-mt7986-spim-nand-ddr4
  endef
  
@@ -21,7 +21,7 @@ index c4a2d0c2b062ae06cdee5b172ba6ea55a1735bf3..a10dd99b67f2e000084ee197bbb1b939
  define U-Boot/mt7986_xiaomi_redmi-router-ax6000
    NAME:=Xiaomi Redmi AX6000
    BUILD_SUBTARGET:=filogic
-@@ -1498,6 +1510,7 @@ UBOOT_TARGETS := \
+@@ -1672,6 +1684,7 @@ UBOOT_TARGETS := \
  	mt7986_mercusys_mr90x-v1 \
  	mt7986_netcore_n60 \
  	mt7986_netcore_n60-pro \
@@ -31,7 +31,7 @@ index c4a2d0c2b062ae06cdee5b172ba6ea55a1735bf3..a10dd99b67f2e000084ee197bbb1b939
  	mt7986_tplink_tl-xdr6088 \
 diff --git a/package/boot/uboot-mediatek/patches/490-add-ruijie-rg-x60.patch b/package/boot/uboot-mediatek/patches/490-add-ruijie-rg-x60.patch
 new file mode 100644
-index 0000000000000000000000000000000000000000..eda1065c3c02a6a5570ca740328d1297578f67c2
+index 0000000..eda1065
 --- /dev/null
 +++ b/package/boot/uboot-mediatek/patches/490-add-ruijie-rg-x60.patch
 @@ -0,0 +1,325 @@
@@ -362,7 +362,7 @@ index 0000000000000000000000000000000000000000..eda1065c3c02a6a5570ca740328d1297
 ++_bootmenu_update_title=setenv _bootmenu_update_title ; setenv bootmenu_title "$bootmenu_title        [33m$ver[0m"
 diff --git a/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-ubootmod.dts b/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-ubootmod.dts
 new file mode 100644
-index 0000000000000000000000000000000000000000..48c7f1096945c0367c5caee491afcaa48fb2adf0
+index 0000000..48c7f10
 --- /dev/null
 +++ b/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-ubootmod.dts
 @@ -0,0 +1,200 @@
@@ -567,7 +567,7 @@ index 0000000000000000000000000000000000000000..48c7f1096945c0367c5caee491afcaa4
 +	};
 +};
 diff --git a/target/linux/mediatek/filogic/base-files/etc/board.d/02_network b/target/linux/mediatek/filogic/base-files/etc/board.d/02_network
-index 57f69cf2140d073c47bed9d62334e68dc4bcde82..dd1e8048f010ef608206362932a2a4ead7ef1999 100644
+index cd2aebb..26d90e0 100644
 --- a/target/linux/mediatek/filogic/base-files/etc/board.d/02_network
 +++ b/target/linux/mediatek/filogic/base-files/etc/board.d/02_network
 @@ -21,6 +21,7 @@ mediatek_setup_interfaces()
@@ -579,10 +579,10 @@ index 57f69cf2140d073c47bed9d62334e68dc4bcde82..dd1e8048f010ef608206362932a2a4ea
  	zbtlink,zbt-z8103ax-c)
  		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3" eth1
 diff --git a/target/linux/mediatek/filogic/base-files/etc/hotplug.d/ieee80211/11_fix_wifi_mac b/target/linux/mediatek/filogic/base-files/etc/hotplug.d/ieee80211/11_fix_wifi_mac
-index 0a961e719e21c1e42dc78d90ebcaabf5b39dbddb..c70d63bd0178d0872f9796c83ec7baa0bf24db1f 100644
+index 0676ae7..2bf75ac 100644
 --- a/target/linux/mediatek/filogic/base-files/etc/hotplug.d/ieee80211/11_fix_wifi_mac
 +++ b/target/linux/mediatek/filogic/base-files/etc/hotplug.d/ieee80211/11_fix_wifi_mac
-@@ -234,7 +234,8 @@ case "$board" in
+@@ -289,7 +289,8 @@ case "$board" in
  		addr=$(mtd_get_mac_binary "Factory" 0x4)
  		[ "$PHYNBR" = "1" ] && macaddr_add $addr 1 > /sys${DEVPATH}/macaddress
  		;;
@@ -593,10 +593,10 @@ index 0a961e719e21c1e42dc78d90ebcaabf5b39dbddb..c70d63bd0178d0872f9796c83ec7baa0
  		;;
  	tplink,eap683-lr|\
 diff --git a/target/linux/mediatek/filogic/base-files/lib/upgrade/platform.sh b/target/linux/mediatek/filogic/base-files/lib/upgrade/platform.sh
-index 70277f3ddde46234099ce005205c20c7aa12d35b..1fbcb600c25c0e6448738ced19fafd1df906dc7b 100644
+index e69f36f..43a59fc 100644
 --- a/target/linux/mediatek/filogic/base-files/lib/upgrade/platform.sh
 +++ b/target/linux/mediatek/filogic/base-files/lib/upgrade/platform.sh
-@@ -183,6 +183,7 @@ platform_do_upgrade() {
+@@ -213,6 +213,7 @@ platform_do_upgrade() {
  	qihoo,360t7-ubi|\
  	routerich,ax3000-ubootmod|\
  	routerich,be7200|\
@@ -604,19 +604,19 @@ index 70277f3ddde46234099ce005205c20c7aa12d35b..1fbcb600c25c0e6448738ced19fafd1d
  	snr,snr-cpe-ax2|\
  	teralink,tl3020-256mb|\
  	tplink,be450-ubi|\
-@@ -433,6 +434,7 @@ platform_check_image() {
+@@ -473,6 +474,7 @@ platform_check_image() {
  	qihoo,360t7|\
  	qihoo,360t7-ubi|\
  	routerich,ax3000-ubootmod|\
 +	ruijie,rg-x60-ubootmod|\
  	teralink,tl3020-256mb|\
  	tplink,be450-ubi|\
- 	tplink,tl-7dr7230-v1|\
+ 	tplink,tl-7dr7230-v2|\
 diff --git a/target/linux/mediatek/image/filogic.mk b/target/linux/mediatek/image/filogic.mk
-index 3d523ab9e4c2c2482bd4eaa08f505c104c8829c3..e53aa32a185184da3d309f5ba949a33ba3c44245 100644
+index 6832fa3..87740d1 100644
 --- a/target/linux/mediatek/image/filogic.mk
 +++ b/target/linux/mediatek/image/filogic.mk
-@@ -3318,6 +3318,33 @@ define Device/ruijie_rg-x60-pro
+@@ -3707,6 +3707,33 @@ define Device/ruijie_rg-x60-pro
  endef
  TARGET_DEVICES += ruijie_rg-x60-pro
  
@@ -650,4 +650,3 @@ index 3d523ab9e4c2c2482bd4eaa08f505c104c8829c3..e53aa32a185184da3d309f5ba949a33b
  define Device/snr_snr-cpe-ax2
    DEVICE_VENDOR := SNR
    DEVICE_MODEL := SNR-CPE-AX2
-

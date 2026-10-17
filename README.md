@@ -58,7 +58,7 @@ Workflow Runs 使用另一套策略：编译、产物检查或上传失败时不
 
 ## 长效补丁策略
 
-[`patches/0001-mediatek-add-ruijie-rg-x60-ubootmod.patch`](patches/0001-mediatek-add-ruijie-rg-x60-ubootmod.patch) 基于 ImmortalWrt `fbef452572985e2cdb5a8843845f767b3bf4883d`（2026-08-18）重基，带完整 Git blob 索引。
+[`patches/0001-mediatek-add-ruijie-rg-x60-ubootmod.patch`](patches/0001-mediatek-add-ruijie-rg-x60-ubootmod.patch) 基于 ImmortalWrt `2248ed75465327b4eed0ffcc3ece361dc1e62d75`（2026-10-16）重基，带完整 Git blob 索引。
 
 [`scripts/apply-patch.sh`](scripts/apply-patch.sh) 会：
 
@@ -67,10 +67,13 @@ Workflow Runs 使用另一套策略：编译、产物检查或上传失败时不
 3. 上下文发生变化时自动使用 Git 三方合并；
 4. 对部分合入或无法合并的状态立即报错，避免编出不完整固件。
 
+[`scripts/patch-feeds.sh`](scripts/patch-feeds.sh) 会在 `feeds update -a` 之后自动修正上游 feeds 中的临时破坏（如 `immortalwrt/packages` 的 miniupnpd 2.3.11 补丁漂移问题），在上游修复后自动跳过。
+
 本地已有 ImmortalWrt 源码时也可以运行：
 
 ```bash
 bash ./scripts/apply-patch.sh ../immortalwrt
+bash ./scripts/patch-feeds.sh ../immortalwrt
 ```
 
 ## 重要提示
